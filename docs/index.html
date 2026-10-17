@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Watching a Transformer Grok</title>
-  <meta name="description" content="An interactive look inside a tiny transformer as it memorises modular addition, then suddenly generalises, as a Fourier-based algorithm forms in its weights.">
-  <meta property="og:title" content="Watching a Transformer Grok">
+  <title>Wheels Within Wheels</title>
+  <meta name="description" content="An interactive look inside a tiny transformer as it memorises modular addition, then generalises as a Fourier-based algorithm forms in its weights.">
+  <meta property="og:title" content="Wheels Within Wheels">
   <meta property="og:description" content="Scrub through training and watch circular structure emerge in a transformer's embeddings as it groks (a + b) mod 113.">
   <meta property="og:type" content="website">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%232a78d6' stroke-width='3'/%3E%3Ccircle cx='27' cy='16' r='3' fill='%23eb6834'/%3E%3C/svg%3E">
@@ -17,13 +17,11 @@
   <header class="hero">
     <div class="hero-inner">
       <p class="eyebrow">Mechanistic interpretability · a replication of Nanda et al. (2023)</p>
-      <h1>Watching a transformer grok</h1>
+      <h1>Wheels within wheels - transformer internal learning</h1>
       <p class="lede">
-        A tiny transformer learns to add numbers on a 113-hour clock. First it simply memorises
-        its training examples. Then, thousands of steps later and with no change to the
-        training set, it suddenly <em>generalises</em>. Scrub through training to watch the
-        algorithm it discovers take shape in its weights: numbers arranged in circles,
-        built from a handful of waves.
+        A small transformer is trained to add numbers on a 113-hour clock. It first overfits,
+        memorising the training examples. With continued training it learns to <em>generalise</em>.
+        Scrub through training to see how.
       </p>
       <div class="hero-links">
         <a href="https://github.com/jp-ganis/modulo_interpretability">Code on GitHub</a>
@@ -79,7 +77,7 @@
         <figure class="panel panel-norm">
           <header class="panel-head"><h2>Total weight norm</h2></header>
           <div class="chart" id="chart-norm"></div>
-          <figcaption>Weight decay pulls this down; a lookup table is expensive.</figcaption>
+          <figcaption>L2 norm of all parameters. Weight decay penalises it; memorisation inflates it.</figcaption>
         </figure>
 
         <figure class="panel panel-ring">
@@ -135,101 +133,95 @@
         </p>
         <p>
           It's a one-layer transformer (4 attention heads, a 512-neuron MLP, about 227k parameters)
-          trained with a strong <strong>weight decay</strong>. At step 0 its weights are random, so
-          every panel shows noise.
+          trained with a strong <strong>weight decay</strong>. At step 0 its weights are random.
         </p>
         <button class="show-me" type="button">Show me</button>
       </article>
 
       <article class="step" data-at="memorisation_end" data-freq="1">
         <p class="step-kicker">2 · Memorisation · steps 0 – <span data-fill="memorisation_end"></span></p>
-        <h3>A perfect score, for the wrong reasons</h3>
+        <h3>Overfitting</h3>
         <p>
-          Within about 150 steps, training accuracy hits 100%. Test loss doesn't fall: it
-          <em>climbs</em> to about <span data-fill="test_loss_peak"></span>, far worse than random guessing
-          (ln 113 ≈ 4.7). The network has built a lookup table and is confidently wrong about
-          anything it hasn't seen.
+          Within about 150 steps, training accuracy reaches 100%. Test loss rises above random
+          guessing (ln 113 ≈ 4.7). The network has learned a lookup table for the training data and
+          nothing else.
         </p>
         <p>
-          Watch the weight norm grow from <span data-fill="norm_start"></span> to
-          <span data-fill="norm_peak"></span>. Storing nearly 4,000 arbitrary answers takes a lot of
-          weight.
+          The weight norm grows from <span data-fill="norm_start"></span> to
+          <span data-fill="norm_peak"></span>: storing nearly 4,000 arbitrary answers requires large
+          weights.
         </p>
         <button class="show-me" type="button">Show me</button>
       </article>
 
       <article class="step" data-at="circuit_late" data-freq="1" data-progress="true">
         <p class="step-kicker">3 · Circuit formation · to step <span data-fill="cleanup_start"></span></p>
-        <h3>Nothing seems to happen, but something does</h3>
+        <h3>Dead Period</h3>
         <p>
-          For thousands of steps the headline curves barely move. Underneath, weight decay keeps
-          squeezing, and the norm falls steadily. In the spectrum, four frequencies,
-          <span data-fill="key_freqs"></span>, slowly rise above the noise, and the k = 1 ring
-          begins to organise itself.
+          For thousands of steps the headline curves barely move. The weight norm falls, and slow
+          structure appears in the spectrum and the k = 1 ring.
         </p>
         <p>
-          The <strong>progress measures</strong> (now switched on) make this visible.
+          The <strong>progress measures</strong> (now on) track this.
           <span class="swatch swatch-aqua"></span><em>Restricted loss</em> keeps only the Fourier
-          part of the model's output, and it falls steadily.
-          <span class="swatch swatch-dash"></span><em>Excluded loss</em> removes that part, and it
-          rises. A new algorithm is being built underneath the memorised one.
+          part of the model's output and falls steadily.
+          <span class="swatch swatch-dash"></span><em>Excluded loss</em> removes that part and
+          rises. A Fourier circuit is forming alongside the memorised solution.
         </p>
         <button class="show-me" type="button">Show me</button>
       </article>
 
       <article class="step" data-at="grok_step" data-freq="1" data-progress="true">
         <p class="step-kicker">4 · Grokking · step <span data-fill="grok_step"></span></p>
-        <h3>The sudden part</h3>
+        <h3>Generalisation</h3>
         <p>
-          At around step <span data-fill="grok_step"></span>, the Fourier circuit becomes strong
-          enough to produce the answer on its own. Test accuracy goes from near-chance to over 95% in a
-          few hundred steps, and test loss eventually falls by over seven orders of magnitude.
+          Around step <span data-fill="grok_step"></span> the Fourier circuit is strong enough to
+          produce the answer alone. Test accuracy rises from near chance to over 95% within a few
+          hundred steps; test loss eventually falls by over seven orders of magnitude.
         </p>
         <p>
-          It looks like a flash of insight. It isn't. As the previous step showed, the circuit has
-          been forming for thousands of steps. This is just the moment it starts to dominate.
+          The circuit has been forming since the previous phase. This is the point at which it
+          outweighs the lookup table.
         </p>
         <button class="show-me" type="button">Show me</button>
       </article>
 
       <article class="step" data-at="cleanup_end" data-freq="21">
         <p class="step-kicker">5 · Cleanup · to step <span data-fill="cleanup_end"></span></p>
-        <h3>Weight decay clears out the lookup table</h3>
+        <h3>Cleanup</h3>
         <p>
-          Once the general algorithm is doing the work, the memorisation weights only add cost.
-          Weight decay removes them: the norm drops to about <span data-fill="norm_final"></span>, the
-          noise floor of the spectrum collapses, and every ring snaps into focus.
+          With the general algorithm in place, the memorisation weights only add to the weight-decay
+          penalty, and are removed. The norm drops to about <span data-fill="norm_final"></span>, the
+          spectrum's noise floor collapses, and the rings sharpen.
         </p>
         <button class="show-me" type="button">Show me</button>
       </article>
 
       <article class="step" data-at="final" data-freq="21" data-connect="true">
         <p class="step-kicker">6 · The algorithm</p>
-        <h3>Adding numbers by rotating</h3>
+        <h3>Addition as rotation</h3>
         <p>
           Each key frequency <i>k</i> places number <i>a</i> on a circle at angle
-          <i>w·a</i>, where <i>w = 2πk/113</i>. With consecutive numbers connected, each +1 jumps
+          <i>w·a</i>, where <i>w = 2πk/113</i>. With consecutive numbers connected, each +1 moves
           <i>k</i> positions around the ring.
         </p>
         <p>
-          Adding <i>a</i> and <i>b</i> is then just combining two rotations: the attention and MLP
-          layers compute <i>cos(w(a+b))</i> and <i>sin(w(a+b))</i> using trig identities. The output
-          layer then scores each candidate answer <i>c</i> with <i>cos(w(a+b−c))</i>, which peaks
-          exactly when <i>c ≡ a+b</i>. Each frequency on its own gives a rough answer; the four peaks
-          only line up at the correct one.
+          Adding <i>a</i> and <i>b</i> composes two rotations: the attention and MLP layers compute
+          <i>cos(w(a+b))</i> and <i>sin(w(a+b))</i> via trig identities. The output layer scores each
+          candidate <i>c</i> with <i>cos(w(a+b−c))</i>, which peaks at <i>c ≡ a+b</i>. Each frequency
+          alone gives an approximate answer; the four peaks coincide only at the correct one.
         </p>
         <button class="show-me" type="button">Show me</button>
       </article>
 
       <article class="step" data-at="final" data-freq="1" data-progress="true">
         <p class="step-kicker">7 · Why weight decay matters</p>
-        <h3>Every parameter pays rent</h3>
+        <h3>Role of weight decay</h3>
         <p>
-          Memorising and the Fourier algorithm both fit the training data perfectly, so the training
-          loss alone gives the model no reason to switch. Weight decay does: it charges for the size of
-          every weight. A few waves shared across all inputs are far cheaper than nearly 4,000 stored
-          answers, so the optimiser drifts toward the general solution. Without weight decay, grokking is
-          dramatically slower or doesn't happen at all.
+          Memorisation and the Fourier algorithm both fit the training data, so training loss alone
+          gives no reason to switch. Weight decay penalises weight magnitude. A few waves shared across
+          all inputs cost far less than nearly 4,000 stored answers, so optimisation moves toward the
+          general solution. Without weight decay, grokking is much slower or does not occur.
         </p>
         <button class="show-me" type="button">Show me</button>
       </article>
@@ -239,9 +231,9 @@
         <h3>Explore</h3>
         <p>
           Drag the timeline or press play (<kbd>Space</kbd>; <kbd>←</kbd> <kbd>→</kbd> step one
-          frame). Click a blue bar in the spectrum to switch rings, hover a dot to find that number
-          in both scatter plots, and switch the PCA to a per-frame basis to see which directions
-          dominate at each moment.
+          frame). Click a blue spectrum bar to switch rings, hover a dot to locate that number in
+          both scatter plots, or set PCA to per-frame to see the dominant directions at each
+          checkpoint.
         </p>
       </article>
     </section>
@@ -257,8 +249,8 @@
           The progress measures follow <a href="https://arxiv.org/abs/2301.05217">Nanda et al.</a>: they
           split the model's output into its key-frequency Fourier part and everything else.</dd>
         <dt>Weight norm</dt>
-        <dd>√(sum of every parameter squared). AdamW with weight decay 1.0 shrinks every weight a little
-          each step, so the network has to keep "paying" for everything it stores.</dd>
+        <dd>√(sum of every parameter squared). AdamW with weight decay 1.0 shrinks every weight each
+          step, so anything the network stores has an ongoing cost.</dd>
         <dt>Fourier spectrum</dt>
         <dd>The embedding gives each number <i>a</i> a 128-dimensional vector. Read each dimension as a
           function of <i>a</i>, rewrite it as a sum of waves <i>cos(2πka/113)</i> and
@@ -267,11 +259,11 @@
           <span data-fill="key_freqs_count"></span>.</dd>
         <dt>Ring</dt>
         <dd>Every number's embedding, projected onto the plane spanned by the <em>final</em> model's
-          cos and sin directions for frequency <i>k</i>. The axes are fixed for every frame, so you're
-          seeing structure emerge, not the camera moving. The dashed circle is radius 1, where a fully
-          formed ring sits.</dd>
+          cos and sin directions for frequency <i>k</i>. The axes are fixed across frames, so changes
+          reflect the embedding, not the projection. The dashed circle (radius 1) marks a fully formed
+          ring.</dd>
         <dt>PCA</dt>
-        <dd>The two directions along which the final embedding varies most. They turn out to be the
+        <dd>The two directions along which the final embedding varies most. These correspond to the
           k = 1 ring. "Per frame" recomputes PCA for each checkpoint, aligned to its neighbour so
           it doesn't flip; early on, its top directions are noise.</dd>
       </dl>
