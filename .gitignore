@@ -1,0 +1,14 @@
+# Training outputs (checkpoints are ~1 MB each, a few hundred per run)
+runs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

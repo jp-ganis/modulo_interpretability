@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Watching a Transformer Grok</title>
+  <meta name="description" content="An interactive look inside a tiny transformer as it memorises modular addition, then suddenly generalises, as a Fourier-based algorithm forms in its weights.">
+  <meta property="og:title" content="Watching a Transformer Grok">
+  <meta property="og:description" content="Scrub through training and watch circular structure emerge in a transformer's embeddings as it groks (a + b) mod 113.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%232a78d6' stroke-width='3'/%3E%3Ccircle cx='27' cy='16' r='3' fill='%23eb6834'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="vendor/d3.v7.9.0.min.js" defer></script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">Mechanistic interpretability · a replication of Nanda et al. (2023)</p>
+      <h1>Watching a transformer grok</h1>
+      <p class="lede">
+        A tiny transformer learns to add numbers on a 113-hour clock. First it simply memorises
+        its training examples. Then, thousands of steps later and with no change to the
+        training set, it suddenly <em>generalises</em>. Scrub through training to watch the
+        algorithm it discovers take shape in its weights: numbers arranged in circles,
+        built from a handful of waves.
+      </p>
+      <div class="hero-links">
+        <a href="https://github.com/jp-ganis/modulo_interpretability">Code on GitHub</a>
+        <a href="#notes">How it works</a>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+          <span>Theme</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout" id="top">
+    <!-- Linked panels; pinned beside the story on wide screens -->
+    <section class="dash" id="dash" aria-label="Interactive training dashboard">
+      <div class="controls" role="group" aria-label="Timeline">
+        <button id="play" class="play" type="button" aria-label="Play">
+          <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>
+          <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4.5v16H6zM13.5 4H18v16h-4.5z"/></svg>
+        </button>
+        <div class="scrubber">
+          <input id="scrubber" type="range" min="0" max="0" value="0" step="1" aria-label="Training checkpoint">
+          <div id="phase-strip" class="phase-strip" aria-hidden="true"></div>
+        </div>
+        <label class="speed">
+          <span class="visually-hidden">Playback speed</span>
+          <select id="speed">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </label>
+        <div id="readout" class="readout" aria-live="polite"></div>
+      </div>
+
+      <div class="panels">
+        <figure class="panel panel-loss">
+          <header class="panel-head">
+            <h2>Loss</h2>
+            <div class="panel-tools">
+              <div class="seg" role="group" aria-label="Metric">
+                <button type="button" data-loss-mode="loss" aria-pressed="true">Loss</button>
+                <button type="button" data-loss-mode="acc" aria-pressed="false">Accuracy</button>
+              </div>
+              <label class="check"><input type="checkbox" id="show-progress"> Progress measures</label>
+            </div>
+          </header>
+          <div class="chart" id="chart-loss"></div>
+          <figcaption>Train vs test on a log step axis. Click anywhere to jump there.</figcaption>
+        </figure>
+
+        <figure class="panel panel-norm">
+          <header class="panel-head"><h2>Total weight norm</h2></header>
+          <div class="chart" id="chart-norm"></div>
+          <figcaption>Weight decay pulls this down; a lookup table is expensive.</figcaption>
+        </figure>
+
+        <figure class="panel panel-ring">
+          <header class="panel-head">
+            <h2>Ring <span class="muted" id="ring-k"></span></h2>
+            <div class="panel-tools">
+              <div class="seg" id="freq-buttons" role="group" aria-label="Key frequency"></div>
+            </div>
+          </header>
+          <div class="chart chart-square" id="chart-ring"></div>
+          <figcaption>
+            <span>Each dot is a number, in the final model's cos/sin plane for frequency k.</span>
+            <span class="caption-tools">
+              <label class="check"><input type="checkbox" id="show-labels"> Numbers</label>
+              <label class="check"><input type="checkbox" id="show-connect"> Connect a → a+1</label>
+              <span class="hue-legend" aria-label="Colour shows the number, 0 to 112"><span>0</span><i id="hue-bar"></i><span>112</span></span>
+            </span>
+          </figcaption>
+        </figure>
+
+        <figure class="panel panel-spectrum">
+          <header class="panel-head"><h2>Fourier spectrum of the embedding</h2></header>
+          <div class="chart" id="chart-spectrum"></div>
+          <figcaption>How much each frequency k is used. Key frequencies in blue; click one to view its ring.</figcaption>
+        </figure>
+
+        <figure class="panel panel-pca">
+          <header class="panel-head">
+            <h2>PCA</h2>
+            <div class="panel-tools">
+              <div class="seg" role="group" aria-label="PCA basis">
+                <button type="button" data-pca="fixed" aria-pressed="true">Final basis</button>
+                <button type="button" data-pca="aligned" aria-pressed="false">Per frame</button>
+              </div>
+            </div>
+          </header>
+          <div class="chart chart-square" id="chart-pca"></div>
+          <figcaption>Top two principal components of the embedding. Hover a dot to find it in both plots.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- The story. Wide screens: scroll-driven. Narrow screens: "Show me" buttons. -->
+    <section class="story" id="story" aria-label="Guided walkthrough">
+      <article class="step" data-at="0" data-freq="1">
+        <p class="step-kicker">1 · The task</p>
+        <h3>Addition on a clock</h3>
+        <p>
+          Each example is two numbers <i>a</i>, <i>b</i> from 0 to 112, fed in as three tokens
+          <code>[a, b, =]</code>. The model must answer <i>(a + b) mod 113</i>: addition on a clock
+          with 113 hours. It trains on a random 30% of the 12,769 possible pairs and is tested on the
+          other 70%.
+        </p>
+        <p>
+          It's a one-layer transformer (4 attention heads, a 512-neuron MLP, about 227k parameters)
+          trained with a strong <strong>weight decay</strong>. At step 0 its weights are random, so
+          every panel shows noise.
+        </p>
+        <button class="show-me" type="button">Show me</button>
+      </article>
+
+      <article class="step" data-at="memorisation_end" data-freq="1">
+        <p class="step-kicker">2 · Memorisation · steps 0 – <span data-fill="memorisation_end"></span></p>
+        <h3>A perfect score, for the wrong reasons</h3>
+        <p>
+          Within about 150 steps, training accuracy hits 100%. Test loss doesn't fall: it
+          <em>climbs</em> to about <span data-fill="test_loss_peak"></span>, far worse than random guessing
+          (ln 113 ≈ 4.7). The network has built a lookup table and is confidently wrong about
+          anything it hasn't seen.
+        </p>
+        <p>
+          Watch the weight norm grow from <span data-fill="norm_start"></span> to
+          <span data-fill="norm_peak"></span>. Storing nearly 4,000 arbitrary answers takes a lot of
+          weight.
+        </p>
+        <button class="show-me" type="button">Show me</button>
+      </article>
+
+      <article class="step" data-at="circuit_late" data-freq="1" data-progress="true">
+        <p class="step-kicker">3 · Circuit formation · to step <span data-fill="cleanup_start"></span></p>
+        <h3>Nothing seems to happen, but something does</h3>
+        <p>
+          For thousands of steps the headline curves barely move. Underneath, weight decay keeps
+          squeezing, and the norm falls steadily. In the spectrum, four frequencies,
+          <span data-fill="key_freqs"></span>, slowly rise above the noise, and the k = 1 ring
+          begins to organise itself.
+        </p>
+        <p>
+          The <strong>progress measures</strong> (now switched on) make this visible.
+          <span class="swatch swatch-aqua"></span><em>Restricted loss</em> keeps only the Fourier
+          part of the model's output, and it falls steadily.
+          <span class="swatch swatch-dash"></span><em>Excluded loss</em> removes that part, and it
+          rises. A new algorithm is being built underneath the memorised one.
+        </p>
+        <button class="show-me" type="button">Show me</button>
+      </article>
+
+      <article class="step" data-at="grok_step" data-freq="1" data-progress="true">
+        <p class="step-kicker">4 · Grokking · step <span data-fill="grok_step"></span></p>
+        <h3>The sudden part</h3>
+        <p>
+          At around step <span data-fill="grok_step"></span>, the Fourier circuit becomes strong
+          enough to produce the answer on its own. Test accuracy goes from near-chance to over 95% in a
+          few hundred steps, and test loss eventually falls by over seven orders of magnitude.
+        </p>
+        <p>
+          It looks like a flash of insight. It isn't. As the previous step showed, the circuit has
+          been forming for thousands of steps. This is just the moment it starts to dominate.
+        </p>
+        <button class="show-me" type="button">Show me</button>
+      </article>
+
+      <article class="step" data-at="cleanup_end" data-freq="21">
+        <p class="step-kicker">5 · Cleanup · to step <span data-fill="cleanup_end"></span></p>
+        <h3>Weight decay clears out the lookup table</h3>
+        <p>
+          Once the general algorithm is doing the work, the memorisation weights only add cost.
+          Weight decay removes them: the norm drops to about <span data-fill="norm_final"></span>, the
+          noise floor of the spectrum collapses, and every ring snaps into focus.
+        </p>
+        <button class="show-me" type="button">Show me</button>
+      </article>
+
+      <article class="step" data-at="final" data-freq="21" data-connect="true">
+        <p class="step-kicker">6 · The algorithm</p>
+        <h3>Adding numbers by rotating</h3>
+        <p>
+          Each key frequency <i>k</i> places number <i>a</i> on a circle at angle
+          <i>w·a</i>, where <i>w = 2πk/113</i>. With consecutive numbers connected, each +1 jumps
+          <i>k</i> positions around the ring.
+        </p>
+        <p>
+          Adding <i>a</i> and <i>b</i> is then just combining two rotations: the attention and MLP
+          layers compute <i>cos(w(a+b))</i> and <i>sin(w(a+b))</i> using trig identities. The output
+          layer then scores each candidate answer <i>c</i> with <i>cos(w(a+b−c))</i>, which peaks
+          exactly when <i>c ≡ a+b</i>. Each frequency on its own gives a rough answer; the four peaks
+          only line up at the correct one.
+        </p>
+        <button class="show-me" type="button">Show me</button>
+      </article>
+
+      <article class="step" data-at="final" data-freq="1" data-progress="true">
+        <p class="step-kicker">7 · Why weight decay matters</p>
+        <h3>Every parameter pays rent</h3>
+        <p>
+          Memorising and the Fourier algorithm both fit the training data perfectly, so the training
+          loss alone gives the model no reason to switch. Weight decay does: it charges for the size of
+          every weight. A few waves shared across all inputs are far cheaper than nearly 4,000 stored
+          answers, so the optimiser drifts toward the general solution. Without weight decay, grokking is
+          dramatically slower or doesn't happen at all.
+        </p>
+        <button class="show-me" type="button">Show me</button>
+      </article>
+
+      <article class="step" data-at="final" data-freq="1">
+        <p class="step-kicker">8 · Your turn</p>
+        <h3>Explore</h3>
+        <p>
+          Drag the timeline or press play (<kbd>Space</kbd>; <kbd>←</kbd> <kbd>→</kbd> step one
+          frame). Click a blue bar in the spectrum to switch rings, hover a dot to find that number
+          in both scatter plots, and switch the PCA to a per-frame basis to see which directions
+          dominate at each moment.
+        </p>
+      </article>
+    </section>
+  </main>
+
+  <section class="notes" id="notes">
+    <div class="notes-inner">
+      <h2>Reading the panels</h2>
+      <dl class="panel-notes">
+        <dt>Loss</dt>
+        <dd>Cross-entropy on the training set (30% of pairs) and the held-out test set (70%), on a log step
+          axis so the early memorisation and late grokking both fit. Shaded bands mark the three phases.
+          The progress measures follow <a href="https://arxiv.org/abs/2301.05217">Nanda et al.</a>: they
+          split the model's output into its key-frequency Fourier part and everything else.</dd>
+        <dt>Weight norm</dt>
+        <dd>√(sum of every parameter squared). AdamW with weight decay 1.0 shrinks every weight a little
+          each step, so the network has to keep "paying" for everything it stores.</dd>
+        <dt>Fourier spectrum</dt>
+        <dd>The embedding gives each number <i>a</i> a 128-dimensional vector. Read each dimension as a
+          function of <i>a</i>, rewrite it as a sum of waves <i>cos(2πka/113)</i> and
+          <i>sin(2πka/113)</i>, and measure how much of each frequency <i>k</i> is used. A random
+          embedding uses every frequency a little; the trained one uses just
+          <span data-fill="key_freqs_count"></span>.</dd>
+        <dt>Ring</dt>
+        <dd>Every number's embedding, projected onto the plane spanned by the <em>final</em> model's
+          cos and sin directions for frequency <i>k</i>. The axes are fixed for every frame, so you're
+          seeing structure emerge, not the camera moving. The dashed circle is radius 1, where a fully
+          formed ring sits.</dd>
+        <dt>PCA</dt>
+        <dd>The two directions along which the final embedding varies most. They turn out to be the
+          k = 1 ring. "Per frame" recomputes PCA for each checkpoint, aligned to its neighbour so
+          it doesn't flip; early on, its top directions are noise.</dd>
+      </dl>
+
+      <h2>The setup</h2>
+      <ul class="setup">
+        <li>p = 113; inputs <code>[a, b, =]</code>; the answer is read from the final position.</li>
+        <li>One layer: d<sub>model</sub> = 128, 4 heads of 32, MLP 512 (ReLU), learned positional
+          embeddings, no LayerNorm, untied embed/unembed.</li>
+        <li>Full-batch AdamW, lr 10<sup>−3</sup>, weight decay 1.0, β = (0.9, 0.98), 10-step warmup; seed 0.</li>
+        <li>Trained for <span data-fill="final_step"></span> steps (about 4½ minutes on a consumer GPU), with
+          508 checkpoints saved; the 300 frames shown are packed most densely where the curves move fastest.</li>
+      </ul>
+
+      <h2>References</h2>
+      <ul class="refs">
+        <li>Power et al. (2022). <a href="https://arxiv.org/abs/2201.02177">Grokking: Generalization Beyond Overfitting on Small Algorithmic Datasets.</a></li>
+        <li>Nanda et al. (2023). <a href="https://arxiv.org/abs/2301.05217">Progress Measures for Grokking via Mechanistic Interpretability.</a></li>
+        <li>Zhong et al. (2023). <a href="https://arxiv.org/abs/2306.17844">The Clock and the Pizza: Two Stories in Mechanistic Explanation of Neural Networks.</a></li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p>Built with PyTorch and D3 by <a href="https://jp-ganis.github.io/">jp-ganis</a>. MIT licence.</p>
+  </footer>
+
+  <div id="tooltip" class="tooltip" role="status" hidden></div>
+  <noscript><p class="noscript">This demo needs JavaScript to draw its charts.</p></noscript>
+</body>
+</html>
