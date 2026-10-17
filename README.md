@@ -1,4 +1,4 @@
-# Watching a transformer grok
+# Wheels within wheels
 
 A replication of [Nanda et al. (2023)](https://arxiv.org/abs/2301.05217): a one-layer transformer
 trained on `(a + b) mod 113` memorises, then groks, as a Fourier-based algorithm forms in its weights.

@@ -1,4 +1,4 @@
-"""Watching a transformer grok modular addition.
+"""Wheels within wheels: a transformer grokking modular addition.
 
 Modules:
     config    - every hyperparameter in one dataclass
